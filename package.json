@@ -1,0 +1,31 @@
+{
+  "name": "ar-cube-web-project",
+  "version": "1.0.0",
+  "description": "An augmented reality project that allows users to scan a cube using their mobile phones.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "webpack serve --mode development",
+    "build": "webpack --mode production"
+  },
+  "keywords": [
+    "augmented-reality",
+    "AR",
+    "cube",
+    "web",
+    "mobile"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "three": "^0.132.2",
+    "aframe": "^1.2.0"
+  },
+  "devDependencies": {
+    "webpack": "^5.64.4",
+    "webpack-cli": "^4.9.1",
+    "webpack-dev-server": "^3.11.2",
+    "babel-loader": "^8.2.3",
+    "@babel/core": "^7.16.0",
+    "@babel/preset-env": "^7.16.0"
+  }
+}
