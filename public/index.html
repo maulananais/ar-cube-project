@@ -11,28 +11,88 @@
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
     
     <style>
+        /* Styling untuk memastikan elemen terlihat */
         .zoom-control {
             position: fixed;
             bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
-            z-index: 1000;
-            background: rgba(0,0,0,0.5);
+            z-index: 9999 !important; /* Sangat tinggi untuk memastikan terlihat */
+            background: rgba(0,0,0,0.7);
             color: white;
-            padding: 10px;
-            border-radius: 5px;
+            padding: 15px;
+            border-radius: 8px;
             display: flex;
             justify-content: center;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            width: 200px;
+            pointer-events: auto !important;
         }
         
         .zoom-btn {
-            background: #007bff;
+            background: #ff4500;
             border: none;
             color: white;
-            padding: 5px 10px;
+            padding: 10px 15px;
             margin: 0 5px;
-            border-radius: 3px;
+            border-radius: 5px;
             cursor: pointer;
+            font-weight: bold;
+            font-size: 16px;
+            width: 100%;
+            transition: background 0.3s;
+        }
+        
+        .zoom-btn:hover {
+            background: #ff6347;
+        }
+        
+        .zoom-btn:active {
+            background: #d43601;
+        }
+        
+        /* Memastikan instruksi terlihat dengan jelas */
+        .instructions {
+            position: fixed;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            z-index: 9999;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+        
+        /* Memastikan tombol selalu berada di atas elemen lain */
+        .a-enter-vr, .a-orientation-modal {
+            z-index: 9998 !important;
+        }
+        
+        /* Feedback visual saat reset zoom */
+        .flash-message {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 150, 0, 0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            font-weight: bold;
+            z-index: 10000;
+            display: none;
+            animation: fadeIn 0.3s, fadeOut 0.3s 1.7s;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
         }
     </style>
 </head>
@@ -42,17 +102,22 @@
         <p>Scan the marker to see a 3D cube</p>
     </div>
     
-    <!-- Kontrol zoom manual -->
-    <div class="zoom-control">
-        <button class="zoom-btn" id="reset-zoom">Reset Zoom (1x)</button>
+    <!-- Feedback visual untuk reset zoom -->
+    <div class="flash-message" id="feedback-message">
+        Zoom Reset!
     </div>
     
-    <!-- Menggunakan scene AR.js dengan pengaturan kamera yang sangat spesifik -->
+    <!-- Kontrol zoom manual dengan styling yang lebih kentara -->
+    <div class="zoom-control" id="zoom-control">
+        <button class="zoom-btn" id="reset-zoom">RESET ZOOM (1X)</button>
+    </div>
+    
+    <!-- Menggunakan scene AR.js dengan pengaturan kamera yang lebih agresif -->
     <a-scene 
         vr-mode-ui="enabled: false"
         renderer="logarithmicDepthBuffer: true; precision: medium;"
         embedded
-        arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; patternRatio: 0.65; cameraParametersUrl: camera_para.dat; facingMode: environment; sourceWidth: 1280; sourceHeight: 720; displayWidth: 1280; displayHeight: 720; canvasWidth: 1280; canvasHeight: 720; maxDetectionRate: 60;">
+        arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; patternRatio: 0.65; facingMode: environment; sourceWidth: 1920; sourceHeight: 1080; displayWidth: 1920; displayHeight: 1080; canvasWidth: 1920; canvasHeight: 1080; maxDetectionRate: 60;">
         
         <!-- Marker -->
         <a-marker preset="hiro" raycaster="objects: .clickable" emitevents="true" cursor="fuse: false; rayOrigin: mouse;" id="marker">
@@ -60,144 +125,178 @@
             <a-box position="0 0.5 0" material="color: red;" scale="1 1 1" class="clickable" animation="property: rotation; to: 360 360 0; dur: 5000; easing: linear; loop: true"></a-box>
         </a-marker>
         
-        <!-- Camera with specific parameters to ensure no zoom -->
-        <a-entity camera="zoom: 1; active: true; fov: 60;"></a-entity>
+        <!-- Camera dengan parameter spesifik untuk mencegah zoom -->
+        <a-entity camera="zoom: 1; fov: 70; active: true;"></a-entity>
     </a-scene>
     
     <script>
-        // Menambahkan event listener setelah halaman dimuat sepenuhnya
-        window.addEventListener('load', function() {
-            console.log('Page fully loaded, initializing camera settings');
+        // Menunggu DOM selesai dimuat
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded, initializing...');
             
-            // Fungsi untuk menetapkan zoom kamera ke 1x (tanpa zoom)
-            function resetCameraZoom() {
-                console.log('Attempting to reset camera zoom...');
+            // Memastikan tombol reset zoom terlihat
+            const zoomControl = document.getElementById('zoom-control');
+            const resetBtn = document.getElementById('reset-zoom');
+            const feedbackMsg = document.getElementById('feedback-message');
+            
+            // Memastikan tombol terlihat secara visual
+            if (zoomControl && resetBtn) {
+                console.log('Zoom controls found in DOM');
+                // Tampilkan tombol dengan jelas
+                zoomControl.style.display = 'flex';
+            } else {
+                console.error('Zoom controls not found!');
+            }
+            
+            // Fungsi untuk menampilkan feedback visual
+            function showFeedback() {
+                feedbackMsg.style.display = 'block';
+                setTimeout(() => {
+                    feedbackMsg.style.display = 'none';
+                }, 2000);
+            }
+            
+            // Fungsi untuk menetapkan zoom kamera ke nilai minimum (tanpa zoom)
+            function forceResetCameraZoom() {
+                console.log('Aggressively resetting camera zoom...');
                 
                 if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
                     // Cari element video yang dibuat oleh AR.js
-                    const videoEl = document.querySelector('video');
-                    if (videoEl && videoEl.srcObject) {
-                        const stream = videoEl.srcObject;
-                        const videoTracks = stream.getVideoTracks();
-                        
-                        if (videoTracks.length > 0) {
-                            const videoTrack = videoTracks[0];
+                    const videoElements = document.querySelectorAll('video');
+                    console.log(`Found ${videoElements.length} video elements`);
+                    
+                    // Coba pada semua elemen video yang ditemukan
+                    videoElements.forEach((videoEl, index) => {
+                        if (videoEl && videoEl.srcObject) {
+                            console.log(`Processing video element ${index}`);
+                            const stream = videoEl.srcObject;
+                            const videoTracks = stream.getVideoTracks();
                             
-                            // Coba semua metode yang mungkin untuk mengatur zoom
-                            try {
-                                // Metode 1: Menggunakan getCapabilities/applyConstraints
-                                if (videoTrack.getCapabilities) {
-                                    const capabilities = videoTrack.getCapabilities();
-                                    console.log('Camera capabilities:', capabilities);
-                                    
-                                    if (capabilities && capabilities.zoom) {
-                                        // Mencoba mengatur zoom ke minimum dan maksimum terlebih dahulu
-                                        // untuk mereset kamera, kemudian ke 1.0
-                                        const min = capabilities.zoom.min || 1.0;
-                                        const max = capabilities.zoom.max || 1.0;
+                            if (videoTracks.length > 0) {
+                                const videoTrack = videoTracks[0];
+                                console.log('Found video track to configure');
+                                
+                                try {
+                                    // Mendapatkan kemampuan kamera
+                                    if (videoTrack.getCapabilities) {
+                                        const capabilities = videoTrack.getCapabilities();
+                                        console.log('Camera capabilities:', capabilities);
                                         
-                                        // Reset ke minimum dulu
-                                        videoTrack.applyConstraints({advanced: [{zoom: min}]})
-                                            .then(() => {
-                                                console.log(`Reset zoom to minimum: ${min}`);
-                                                // Kemudian atur ke 1.0 (jika berbeda dari minimum)
-                                                if (min !== 1.0) {
-                                                    return videoTrack.applyConstraints({advanced: [{zoom: 1.0}]});
-                                                }
+                                        // Jika kamera mendukung zoom
+                                        if (capabilities && capabilities.zoom) {
+                                            // Mendapatkan nilai zoom minimum
+                                            const min = capabilities.zoom.min || 1.0;
+                                            console.log(`Minimum zoom level: ${min}`);
+                                            
+                                            // Mengatur zoom ke minimum (biasanya 1.0 atau kurang)
+                                            videoTrack.applyConstraints({
+                                                advanced: [{zoom: min}]
                                             })
                                             .then(() => {
-                                                console.log('Zoom set to 1.0');
+                                                console.log(`Successfully set zoom to minimum: ${min}`);
+                                                showFeedback();
+                                                
+                                                // Menyimpan pengaturan ke storage lokal
+                                                try {
+                                                    localStorage.setItem('camera-zoom-set', 'true');
+                                                } catch (e) {
+                                                    console.error('Error saving to localStorage:', e);
+                                                }
                                             })
                                             .catch(error => {
                                                 console.error('Failed to set zoom:', error);
                                             });
-                                    }
-                                    
-                                    // Coba atur juga mode fokus
-                                    if (capabilities && capabilities.focusMode) {
-                                        if (capabilities.focusMode.includes('continuous')) {
-                                            videoTrack.applyConstraints({focusMode: 'continuous'})
-                                                .then(() => console.log('Focus mode set to continuous'))
-                                                .catch(e => console.error('Failed to set focus mode:', e));
+                                        } else {
+                                            console.log('Camera does not support zoom capability');
                                         }
+                                    } else {
+                                        console.log('getCapabilities not supported on this device');
                                     }
-                                    
-                                    // Reset jarak fokus jika ada
-                                    if (capabilities && capabilities.focusDistance) {
-                                        videoTrack.applyConstraints({focusDistance: 1.0})
-                                            .then(() => console.log('Focus distance set to 1.0'))
-                                            .catch(e => console.error('Failed to set focus distance:', e));
-                                    }
+                                } catch (e) {
+                                    console.error('Error configuring camera:', e);
                                 }
-                                
-                                // Metode 2: Mencoba menyetel ulang video stream
-                                navigator.mediaDevices.getUserMedia({
-                                    video: {
-                                        facingMode: 'environment',
-                                        width: { ideal: 1280 },
-                                        height: { ideal: 720 },
-                                        zoom: 1.0,  // eksplisit 1.0
-                                        focusMode: 'continuous',
-                                        advanced: [
-                                            { zoom: 1.0 },
-                                            { focusMode: 'continuous' }
-                                        ]
-                                    }
-                                }).then(newStream => {
-                                    console.log('Created new camera stream with reset settings');
-                                    // Tetap simpan stream baru ini, tetapi jangan mengganti
-                                    // stream AR.js karena akan mengganggu pengalaman AR
-                                }).catch(err => {
-                                    console.error('Error creating new stream:', err);
-                                });
-                                
-                            } catch (e) {
-                                console.error('Error accessing camera capabilities:', e);
                             }
                         }
-                    } else {
-                        console.warn('Video element or video stream not found');
+                    });
+                    
+                    // Mencoba pendekatan alternatif
+                    try {
+                        // Menggunakan pengaturan paling dasar yang mungkin berhasil
+                        navigator.mediaDevices.getUserMedia({
+                            video: {
+                                facingMode: 'environment',
+                                zoom: 1.0
+                            }
+                        })
+                        .then(newStream => {
+                            console.log('Created alternative stream for zoom reset');
+                            // Menampilkan stream ini sesaat lalu menutupnya
+                            setTimeout(() => {
+                                newStream.getTracks().forEach(track => track.stop());
+                            }, 500);
+                        })
+                        .catch(err => {
+                            console.warn('Alternative approach failed:', err);
+                        });
+                    } catch (e) {
+                        console.error('Error with alternative approach:', e);
                     }
-                } else {
-                    console.error('getUserMedia not supported in this browser');
                 }
                 
-                // Metode 3: Mencoba menerapkan pengaturan kamera A-Frame
-                const camera = document.querySelector('[camera]').components.camera;
-                if (camera) {
-                    console.log('Setting A-Frame camera parameters');
-                    camera.camera.zoom = 1.0;
-                    camera.camera.updateProjectionMatrix();
+                // Mencoba pendekatan Three.js/A-Frame
+                try {
+                    const camera = document.querySelector('[camera]');
+                    if (camera && camera.components && camera.components.camera) {
+                        console.log('Setting A-Frame camera parameters');
+                        camera.components.camera.camera.zoom = 1.0;
+                        camera.components.camera.camera.fov = 70; // FOV lebih lebar
+                        camera.components.camera.camera.updateProjectionMatrix();
+                        console.log('A-Frame camera parameters updated');
+                    }
+                } catch (e) {
+                    console.error('Error updating A-Frame camera:', e);
                 }
+                
+                showFeedback();
             }
             
-            // Tunggu beberapa detik setelah loading untuk memastikan
-            // AR.js sudah selesai menyiapkan kamera
+            // Mendaftarkan event listener untuk tombol
+            if (resetBtn) {
+                resetBtn.addEventListener('click', function(event) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    console.log('Reset zoom button clicked');
+                    forceResetCameraZoom();
+                    return false;
+                });
+                console.log('Reset zoom button listener registered');
+            }
+            
+            // Jalankan reset awal setelah beberapa detik
             setTimeout(() => {
-                resetCameraZoom();
-                console.log('Initial camera zoom reset attempted');
-            }, 2000); // 2 detik delay
+                forceResetCameraZoom();
+                console.log('Initial camera reset performed');
+            }, 3000);
             
-            // Tambahkan event listener untuk tombol reset zoom
-            document.getElementById('reset-zoom').addEventListener('click', function() {
-                resetCameraZoom();
-                console.log('Manual camera zoom reset requested');
-            });
+            // Reset ulang setiap 10 detik untuk memastikan zoom tetap 1x
+            const resetInterval = setInterval(forceResetCameraZoom, 10000);
             
-            // Event listener untuk marker yang terdeteksi
+            // Event listener untuk marker
             const marker = document.getElementById('marker');
-            marker.addEventListener('markerFound', function() {
-                console.log('Marker found!');
-                document.querySelector('.instructions').innerHTML = '<p>Marker detected! Look at the 3D cube.</p>';
+            if (marker) {
+                marker.addEventListener('markerFound', function() {
+                    console.log('Marker found!');
+                    document.querySelector('.instructions').innerHTML = '<p>Marker detected! Look at the 3D cube.</p>';
+                    
+                    // Reset zoom saat marker terdeteksi
+                    forceResetCameraZoom();
+                });
                 
-                // Coba reset zoom lagi ketika marker ditemukan
-                resetCameraZoom();
-            });
-            
-            marker.addEventListener('markerLost', function() {
-                console.log('Marker lost!');
-                document.querySelector('.instructions').innerHTML = '<h1>AR Cube Demo</h1><p>Scan the marker to see a 3D cube</p>';
-            });
+                marker.addEventListener('markerLost', function() {
+                    console.log('Marker lost!');
+                    document.querySelector('.instructions').innerHTML = '<h1>AR Cube Demo</h1><p>Scan the marker to see a 3D cube</p>';
+                });
+            }
         });
     </script>
 </body>
