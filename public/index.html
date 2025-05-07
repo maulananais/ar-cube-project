@@ -12,6 +12,15 @@
         window.AFRAME_INJECTED = {
             skipAnimationLoop: true
         };
+        
+        // Override fungsi requestAnimationFrame secara global sejak awal
+        window._originalRAF = window.requestAnimationFrame;
+        window.requestAnimationFrame = function(callback) {
+            return window._originalRAF(function(timestamp) {
+                callback(timestamp);
+                // Akan ditambahkan fungsi forceCubeStatic nanti
+            });
+        };
     </script>
     
     <!-- Import A-Frame dan AR.js -->
@@ -146,6 +155,50 @@
             padding: 10px;
             font-size: 14px;
         }
+
+        /* Tombol untuk switch kamera */
+        .camera-switch {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999 !important;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            pointer-events: auto !important;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .camera-switch svg {
+            width: 24px;
+            height: 24px;
+            fill: white;
+            margin-right: 5px;
+        }
+        
+        .camera-switch:hover {
+            background: rgba(50,50,50,0.9);
+        }
+        
+        @media (max-width: 768px) {
+            .camera-switch {
+                padding: 8px 12px;
+                top: 10px;
+                right: 10px;
+            }
+            
+            .camera-switch svg {
+                width: 20px;
+                height: 20px;
+                margin-right: 3px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -176,21 +229,34 @@
     <div class="zoom-control" id="zoom-control">
         <button class="zoom-btn" id="reset-zoom">RESET ZOOM (1X)</button>
     </div>
+
+    <!-- Tombol switch kamera depan/belakang -->
+    <button class="camera-switch" id="switch-camera">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M12 10a2 2 0 100 4 2 2 0 000-4zm0 6a4 4 0 110-8 4 4 0 010 8z"/>
+            <path d="M20 5h-3.17L15 3H9L7.17 5H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 14H4V7h16v12z"/>
+        </svg>
+        <span>Switch Camera</span>
+    </button>
     
     <!-- Menggunakan scene AR.js dengan pengaturan kamera yang lebih agresif -->
     <a-scene 
+        id="ar-scene"
         vr-mode-ui="enabled: false"
         renderer="logarithmicDepthBuffer: true; precision: medium;"
         embedded
         arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; patternRatio: 0.65; facingMode: environment; sourceWidth: 1920; sourceHeight: 1080; displayWidth: 1920; displayHeight: 1080; canvasWidth: 1920; canvasHeight: 1080; maxDetectionRate: 60;">
         
-        <!-- Marker -->
-        <a-marker preset="hiro" id="marker">
-            <!-- Kubus tanpa animasi -->
+        <!-- Marker dengan pengaturan yang menahan posisi lebih stabil -->
+        <a-marker preset="hiro" id="marker" smooth="true" smoothCount="10" smoothTolerance="0.01" smoothThreshold="5">
+            <!-- Kubus dengan atribut static-body dan tick-disable untuk menghindari update yang tidak perlu -->
             <a-box position="0 0.5 0" 
                   material="color: red;" 
                   scale="1 1 1"
-                  id="arCube">
+                  id="arCube"
+                  animation="enabled: false"
+                  static-body="static: true"
+                  tick-disable>
             </a-box>
         </a-marker>
         
@@ -203,7 +269,7 @@
         window.addEventListener('load', function() {
             console.log('Window loaded completely');
             
-            // Force stop animasi
+            // Force stop semua animasi yang mungkin berjalan
             if (window.cancelAnimationFrame) {
                 var id = window.requestAnimationFrame(function(){});
                 while(id--) {
@@ -223,9 +289,82 @@
             const rotateDownBtn = document.getElementById('rotate-down');
             const rotateInstructions = document.getElementById('rotate-instructions');
             const cube = document.getElementById('arCube');
+            const scene = document.querySelector('a-scene');
+            const switchCameraBtn = document.getElementById('switch-camera');
             
             // Variabel untuk menyimpan rotasi kubus
             let cubeRotation = { x: 0, y: 0, z: 0 };
+            let lastRotation = { x: 0, y: 0, z: 0 };
+            
+            // Variabel untuk status kamera
+            let currentCameraFacing = 'environment'; // Default ke kamera belakang
+            
+            // Fungsi untuk mengubah kamera
+            function switchCamera() {
+                showFeedback('Changing camera...');
+                
+                // Ganti kamera
+                currentCameraFacing = currentCameraFacing === 'environment' ? 'user' : 'environment';
+                
+                // Update teks tombol
+                const cameraText = currentCameraFacing === 'environment' ? 'Using Back Camera' : 'Using Front Camera';
+                showFeedback(cameraText);
+                
+                // Dapatkan scene A-Frame
+                const arScene = document.getElementById('ar-scene');
+                
+                // Update facingMode dalam attribut arjs
+                const arjsSystem = arScene.getAttribute('arjs');
+                arjsSystem.facingMode = currentCameraFacing;
+                
+                // Hapus dan ganti ulang atribut arjs
+                arScene.removeAttribute('arjs');
+                arScene.setAttribute('arjs', arjsSystem);
+                
+                // Detach dan reinitialize camera
+                const existingVideo = document.querySelector('video');
+                if (existingVideo) {
+                    const videoStream = existingVideo.srcObject;
+                    if (videoStream) {
+                        const tracks = videoStream.getTracks();
+                        tracks.forEach(track => {
+                            track.stop();
+                        });
+                    }
+                    existingVideo.srcObject = null;
+                    
+                    // Tunggu sedikit waktu untuk memastikan semua track kamera lama sudah berhenti
+                    setTimeout(() => {
+                        // Akses kamera dengan facingMode yang baru
+                        navigator.mediaDevices.getUserMedia({
+                            video: {
+                                facingMode: currentCameraFacing
+                            }
+                        }).then(stream => {
+                            // Cari dan update video element
+                            const videos = document.querySelectorAll('video');
+                            videos.forEach(video => {
+                                video.srcObject = stream;
+                                video.play();
+                            });
+                            
+                            showFeedback(`Camera switched to ${currentCameraFacing === 'environment' ? 'back' : 'front'}`);
+                        }).catch(err => {
+                            console.error('Error accessing the camera:', err);
+                            showFeedback('Camera switch failed!');
+                        });
+                    }, 300);
+                }
+            }
+            
+            // Event listener untuk tombol switch kamera
+            if (switchCameraBtn) {
+                switchCameraBtn.addEventListener('click', function(event) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    switchCamera();
+                });
+            }
             
             // Fungsi untuk menampilkan feedback visual
             function showFeedback(message) {
@@ -281,28 +420,63 @@
             function forceCubeStatic() {
                 if (cube && cube.object3D) {
                     // Simpan rotasi sekarang
-                    cubeRotation.x = cube.object3D.rotation.x;
-                    cubeRotation.y = cube.object3D.rotation.y;
-                    cubeRotation.z = cube.object3D.rotation.z;
+                    if (cube.object3D.rotation) {
+                        // Deteksi bila ada perubahan rotasi yang tidak diinginkan
+                        if (cube.object3D.rotation.x !== cubeRotation.x ||
+                            cube.object3D.rotation.y !== cubeRotation.y ||
+                            cube.object3D.rotation.z !== cubeRotation.z) {
+                            
+                            console.log('Rotasi tidak diinginkan terdeteksi! Diperbaiki...');
+                            
+                            // Kembalikan ke rotasi yang diinginkan
+                            cube.object3D.rotation.x = cubeRotation.x;
+                            cube.object3D.rotation.y = cubeRotation.y;
+                            cube.object3D.rotation.z = cubeRotation.z;
+                            
+                            // Force update matriks
+                            cube.object3D.matrixNeedsUpdate = true;
+                            cube.object3D.updateMatrix();
+                        }
+                    }
                     
                     // Matikan semua animasi
                     if (cube.getAttribute('animation')) {
                         cube.removeAttribute('animation');
                     }
                     
-                    // Cegah perubahan rotasi otomatis (ini penting!)
-                    const originalUpdateMatrix = cube.object3D.updateMatrix;
-                    cube.object3D.updateMatrix = function() {
-                        // Pastikan rotasi tidak berubah secara otomatis
-                        this.rotation.x = cubeRotation.x;
-                        this.rotation.y = cubeRotation.y;
-                        this.rotation.z = cubeRotation.z;
-                        // Panggil fungsi asli
-                        originalUpdateMatrix.call(this);
-                    };
+                    // Juga hapus semua komponen yang mungkin menyebabkan rotasi
+                    if (cube.getAttribute('animation__rotation')) {
+                        cube.removeAttribute('animation__rotation');
+                    }
                     
-                    console.log('Force cube to be static');
+                    // Set rotation attribute langsung
+                    cube.setAttribute('rotation', {
+                        x: THREE.MathUtils.radToDeg(cubeRotation.x),
+                        y: THREE.MathUtils.radToDeg(cubeRotation.y),
+                        z: THREE.MathUtils.radToDeg(cubeRotation.z)
+                    });
                 }
+            }
+            
+            // Override fungsi tick renderer global A-Frame
+            if (AFRAME && AFRAME.scenes && AFRAME.scenes[0]) {
+                const originalTick = AFRAME.scenes[0].tick;
+                AFRAME.scenes[0].tick = function(time, delta) {
+                    originalTick.call(this, time, delta);
+                    forceCubeStatic(); // Paksa posisi setelah setiap tick
+                };
+            }
+            
+            // Override updateMatrixWorld objek kubus
+            if (cube && cube.object3D) {
+                const originalUpdateMatrixWorld = cube.object3D.updateMatrixWorld;
+                cube.object3D.updateMatrixWorld = function(force) {
+                    // Paksa rotasi ke nilai yang kita inginkan sebelum update
+                    this.rotation.x = cubeRotation.x;
+                    this.rotation.y = cubeRotation.y;
+                    this.rotation.z = cubeRotation.z;
+                    originalUpdateMatrixWorld.call(this, force);
+                };
             }
             
             // Fungsi untuk memutar kubus manual
@@ -312,9 +486,22 @@
                     if (axis === 'y') cubeRotation.y += amount;
                     if (axis === 'z') cubeRotation.z += amount;
                     
+                    // Update rotasi objek 3D langsung
                     cube.object3D.rotation.x = cubeRotation.x;
                     cube.object3D.rotation.y = cubeRotation.y;
                     cube.object3D.rotation.z = cubeRotation.z;
+                    
+                    // Update matrix langsung
+                    cube.object3D.matrixNeedsUpdate = true;
+                    cube.object3D.updateMatrix();
+                    cube.object3D.updateMatrixWorld(true);
+                    
+                    // Set rotation attribute juga
+                    cube.setAttribute('rotation', {
+                        x: THREE.MathUtils.radToDeg(cubeRotation.x),
+                        y: THREE.MathUtils.radToDeg(cubeRotation.y),
+                        z: THREE.MathUtils.radToDeg(cubeRotation.z)
+                    });
                     
                     console.log(`Manual rotation: X=${cubeRotation.x.toFixed(2)}, Y=${cubeRotation.y.toFixed(2)}, Z=${cubeRotation.z.toFixed(2)}`);
                     
@@ -370,12 +557,16 @@
                     
                     // Reset zoom dan pastikan kubus tidak berotasi
                     forceResetCameraZoom();
+                    
+                    // Reset rotasi ke nilai awal saat marker ditemukan
+                    cubeRotation = { x: 0, y: 0, z: 0 };
                     forceCubeStatic();
                     
-                    // Set interval untuk terus memastikan kubus tidak berputar
-                    if (!window.cubeStaticInterval) {
-                        window.cubeStaticInterval = setInterval(forceCubeStatic, 100);
+                    // Set interval untuk terus memastikan kubus tidak berputar dengan interval yang lebih cepat
+                    if (window.cubeStaticInterval) {
+                        clearInterval(window.cubeStaticInterval);
                     }
+                    window.cubeStaticInterval = setInterval(forceCubeStatic, 16); // ~ 60fps
                 });
                 
                 marker.addEventListener('markerLost', function() {
@@ -398,24 +589,65 @@
             setTimeout(() => {
                 forceResetCameraZoom();
                 forceCubeStatic();
+                
+                // Deteksi jika pengguna mungkin menggunakan PC (tidak memiliki kamera belakang)
+                // Cek apakah browser berjalan di perangkat mobile atau desktop
+                const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                
+                // Jika bukan mobile, mungkin PC, langsung set ke kamera depan
+                if (!isMobile) {
+                    currentCameraFacing = 'user';
+                    switchCamera();
+                }
+                
                 console.log('Initial camera and cube setup complete');
-            }, 3000);
+            }, 1000);
             
             // Reset zoom setiap 10 detik
             const resetZoomInterval = setInterval(forceResetCameraZoom, 10000);
             
-            // Override fungsi requestAnimationFrame untuk mencegah animasi otomatis
-            const originalRAF = window.requestAnimationFrame;
+            // Update fungsi global requestAnimationFrame yang sudah kita override di awal
             window.requestAnimationFrame = function(callback) {
-                // Filter callback yang mungkin mengubah rotasi kubus
-                const wrappedCallback = function(timestamp) {
-                    // Panggil callback asli
+                return window._originalRAF(function(timestamp) {
                     callback(timestamp);
-                    // Pastikan kubus tetap statis
+                    // Force cube to stay static after each animation frame
                     forceCubeStatic();
-                };
-                return originalRAF(wrappedCallback);
+                });
             };
+            
+            // Hapus semua event listener yang mungkin menyebabkan perubahan rotasi
+            if (scene) {
+                scene.addEventListener('loaded', function() {
+                    console.log('Scene loaded - applying final anti-rotation measures');
+                    
+                    // Nonaktifkan tick handler default milik A-Frame
+                    if (cube.sceneEl) {
+                        cube.sceneEl.pause();
+                        setTimeout(() => {
+                            // Resume scene tapi dengan tick handler kustom
+                            cube.sceneEl.play();
+                            forceCubeStatic();
+                        }, 100);
+                    }
+                    
+                    // Paksa cube rotation ke awal lagi setelah scene loaded
+                    cubeRotation = { x: 0, y: 0, z: 0 };
+                    forceCubeStatic();
+                });
+            }
+            
+            // Tambahkan event listener untuk keydown untuk debug
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'r') {
+                    console.log('Manual reset triggered');
+                    cubeRotation = { x: 0, y: 0, z: 0 };
+                    forceCubeStatic();
+                    showFeedback('Cube rotation reset');
+                } else if (e.key === 'c') {
+                    // Shortcut for camera switch with 'c' key
+                    switchCamera();
+                }
+            });
         });
     </script>
 </body>
