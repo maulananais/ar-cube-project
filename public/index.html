@@ -8,6 +8,59 @@
     <!-- Import A-Frame and AR.js -->
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    
+    <!-- Script untuk mengatur kamera agar tidak zoom -->
+    <script>
+        window.addEventListener('load', function() {
+            // Fungsi untuk mengatur kamera agar tidak zoom
+            function configureCameraNoZoom() {
+                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                    const constraints = {
+                        video: {
+                            facingMode: 'environment',
+                            width: { ideal: 1280 },
+                            height: { ideal: 960 },
+                            zoom: 1.0
+                        }
+                    };
+
+                    navigator.mediaDevices.getUserMedia(constraints)
+                        .then(function(stream) {
+                            const videoTrack = stream.getVideoTracks()[0];
+                            
+                            if (videoTrack && videoTrack.getCapabilities) {
+                                const capabilities = videoTrack.getCapabilities();
+                                
+                                if (capabilities && capabilities.zoom) {
+                                    videoTrack.applyConstraints({
+                                        advanced: [{ zoom: 1.0 }]
+                                    })
+                                    .then(() => console.log('Zoom set to 1x'))
+                                    .catch(e => console.log('Could not set zoom:', e));
+                                }
+                            }
+                        })
+                        .catch(function(error) {
+                            console.error('Error accessing camera:', error);
+                        });
+                }
+            }
+
+            // Panggil fungsi pengaturan kamera saat dokumen dimuat
+            configureCameraNoZoom();
+            
+            // Tambahkan event listener untuk marker yang terdeteksi
+            document.querySelector('a-marker').addEventListener('markerFound', function() {
+                console.log('Marker found!');
+                document.querySelector('.instructions').innerHTML = '<p>Marker detected! Look at the 3D cube.</p>';
+            });
+            
+            document.querySelector('a-marker').addEventListener('markerLost', function() {
+                console.log('Marker lost!');
+                document.querySelector('.instructions').innerHTML = '<h1>AR Cube Demo</h1><p>Scan the marker to see a 3D cube</p>';
+            });
+        });
+    </script>
 </head>
 <body>
     <div class="instructions">
@@ -15,15 +68,54 @@
         <p>Scan the marker to see a 3D cube</p>
     </div>
     
-    <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; facingMode: environment;">
+    <a-scene embedded 
+            arjs="sourceType: webcam; 
+                  debugUIEnabled: false; 
+                  detectionMode: mono_and_matrix; 
+                  sourceWidth: 1280; 
+                  sourceHeight: 960;
+                  displayWidth: 1280; 
+                  displayHeight: 960; 
+                  maxDetectionRate: 30;
+                  canvasWidth: 1280;
+                  canvasHeight: 960;
+                  facingMode: environment;">
         <!-- This is our marker -->
         <a-marker preset="hiro">
             <!-- We position a cube on top of the marker -->
             <a-box position="0 0.5 0" material="color: red;" scale="1 1 1" animation="property: rotation; to: 360 360 0; dur: 5000; easing: linear; loop: true"></a-box>
         </a-marker>
         
-        <!-- Camera -->
-        <a-entity camera></a-entity>
+        <!-- Camera with specific parameters to prevent zoom -->
+        <a-entity camera camera-settings></a-entity>
     </a-scene>
+    
+    <!-- Komponen kamera-settings untuk AR.js -->
+    <script>
+        // Register a custom component to control camera settings
+        AFRAME.registerComponent('camera-settings', {
+            init: function() {
+                this.el.addEventListener('camera-set-active', function() {
+                    // Try to configure video constraints after camera is active
+                    const sceneEl = document.querySelector('a-scene');
+                    if (sceneEl.camera && sceneEl.camera.el) {
+                        const cameraEl = sceneEl.camera.el;
+                        
+                        // Apply custom camera settings if possible
+                        if (cameraEl.components && cameraEl.components.camera) {
+                            console.log('Applying custom camera settings');
+                            
+                            // Force the camera to use normal field of view (no zoom)
+                            if (sceneEl.camera) {
+                                sceneEl.camera.fov = 60; // Standard field of view
+                                sceneEl.camera.zoom = 1; // No zoom
+                                sceneEl.camera.updateProjectionMatrix();
+                            }
+                        }
+                    }
+                });
+            }
+        });
+    </script>
 </body>
 </html>
