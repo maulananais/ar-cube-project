@@ -151,6 +151,15 @@
                         this.rotationX = 0;
                         this.rotationY = 0;
                         
+                        // Sangat penting: Batalkan semua animasi yang ada
+                        if (this.el.getAttribute('animation')) {
+                            console.log('Removing existing animation from cube');
+                            this.el.removeAttribute('animation');
+                        }
+                        
+                        // Log untuk memastikan komponen diinisialisasi
+                        console.log('Drag-rotate component initialized for manual rotation');
+                        
                         this.el.addEventListener('mousedown', this.onMouseDown.bind(this));
                         this.el.addEventListener('mouseup', this.onMouseUp.bind(this));
                         this.el.addEventListener('mousemove', this.onMouseMove.bind(this));
@@ -161,9 +170,12 @@
                         this.el.addEventListener('touchmove', this.onTouchMove.bind(this));
                     },
                     onMouseDown: function(event) {
+                        console.log('Mouse down on cube, starting rotation');
                         this.ifMouseDown = true;
                         this.lastX = event.clientX;
                         this.lastY = event.clientY;
+                        event.preventDefault();
+                        event.stopPropagation();
                     },
                     onMouseUp: function(event) {
                         this.ifMouseDown = false;
@@ -181,10 +193,12 @@
                             
                             this.lastX = event.clientX;
                             this.lastY = event.clientY;
+                            console.log(`Manual rotation: X=${this.rotationX.toFixed(2)}, Y=${this.rotationY.toFixed(2)}`);
                         }
                     },
                     // Handler untuk sentuhan mobile
                     onTouchStart: function(event) {
+                        console.log('Touch start on cube');
                         this.ifMouseDown = true;
                         this.lastX = event.touches[0].clientX;
                         this.lastY = event.touches[0].clientY;
@@ -208,9 +222,32 @@
                             this.lastX = event.touches[0].clientX;
                             this.lastY = event.touches[0].clientY;
                             
+                            console.log(`Manual touch rotation: X=${this.rotationX.toFixed(2)}, Y=${this.rotationY.toFixed(2)}`);
+                            
                             // Mencegah gulir halaman saat berinteraksi dengan objek
                             event.preventDefault();
                         }
+                    }
+                });
+                
+                // Komponen untuk mencegah rotasi otomatis
+                AFRAME.registerComponent('no-auto-rotate', {
+                    init: function() {
+                        console.log('Initializing no-auto-rotate component');
+                        
+                        // Hapus atribut animasi jika ada
+                        if (this.el.getAttribute('animation')) {
+                            console.log('Removing animation attribute from cube');
+                            this.el.removeAttribute('animation');
+                        }
+                        
+                        // Setel rotasi awal
+                        this.el.object3D.rotation.set(0, 0, 0);
+                        
+                        // Cek setiap frame untuk memastikan tidak ada rotasi otomatis
+                        this.el.sceneEl.addEventListener('renderstart', () => {
+                            console.log('Scene started rendering, ensuring no auto-rotation');
+                        });
                     }
                 });
             </script>
@@ -218,11 +255,12 @@
         
         <!-- Marker -->
         <a-marker preset="hiro" raycaster="objects: .clickable" emitevents="true" cursor="fuse: false; rayOrigin: mouse;" id="marker">
-            <!-- Kubus TANPA animasi otomatis, diganti dengan komponen drag-rotate -->
+            <!-- Kubus TANPA animasi otomatis, diganti dengan komponen drag-rotate + no-auto-rotate -->
             <a-box position="0 0.5 0" 
                   material="color: red;" 
                   scale="1 1 1" 
                   class="clickable" 
+                  no-auto-rotate
                   drag-rotate-component="speed: 1.5">
             </a-box>
         </a-marker>
@@ -395,6 +433,13 @@
                     
                     // Reset zoom saat marker terdeteksi
                     forceResetCameraZoom();
+                    
+                    // Pastikan cube tidak berotasi otomatis
+                    const cube = document.querySelector('a-box');
+                    if (cube && cube.getAttribute('animation')) {
+                        console.log('WARNING: Animation reappeared, removing it!');
+                        cube.removeAttribute('animation');
+                    }
                 });
                 
                 marker.addEventListener('markerLost', function() {
@@ -404,6 +449,24 @@
                     // Sembunyikan instruksi rotasi
                     document.getElementById('rotate-instructions').style.display = 'none';
                 });
+            }
+            
+            // Tambahan: pastikan tidak ada animasi otomatis
+            const cube = document.querySelector('a-box');
+            if (cube) {
+                console.log('Found cube, ensuring no animation');
+                // Hapus atribut animasi jika masih ada
+                if (cube.getAttribute('animation')) {
+                    console.log('CRITICAL: Animation still present, removing it!');
+                    cube.removeAttribute('animation');
+                } else {
+                    console.log('Good: No animation attribute found on cube');
+                }
+                
+                // Log properti rotasi awal
+                console.log('Cube initial rotation:', cube.object3D ? 
+                           `X: ${cube.object3D.rotation.x}, Y: ${cube.object3D.rotation.y}, Z: ${cube.object3D.rotation.z}` :
+                           'Object3D not available yet');
             }
         });
     </script>
