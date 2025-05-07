@@ -94,12 +94,29 @@
             from { opacity: 1; }
             to { opacity: 0; }
         }
+        
+        /* Instruksi untuk gerakan */
+        .instruction-rotate {
+            position: fixed;
+            top: 55px;
+            width: 100%;
+            text-align: center;
+            z-index: 9999;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
     <div class="instructions">
         <h1>AR Cube Demo</h1>
         <p>Scan the marker to see a 3D cube</p>
+    </div>
+    
+    <div class="instruction-rotate" id="rotate-instructions" style="display: none;">
+        Sentuh dan geser untuk memutar kubus
     </div>
     
     <!-- Feedback visual untuk reset zoom -->
@@ -119,10 +136,95 @@
         embedded
         arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; patternRatio: 0.65; facingMode: environment; sourceWidth: 1920; sourceHeight: 1080; displayWidth: 1920; displayHeight: 1080; canvasWidth: 1920; canvasHeight: 1080; maxDetectionRate: 60;">
         
+        <!-- Komponen A-Frame untuk interaksi drag -->
+        <a-assets>
+            <script>
+                // Komponen untuk memutar objek dengan sentuhan
+                AFRAME.registerComponent('drag-rotate-component', {
+                    schema: {
+                        speed: {default: 2}
+                    },
+                    init: function() {
+                        this.ifMouseDown = false;
+                        this.lastX = 0;
+                        this.lastY = 0;
+                        this.rotationX = 0;
+                        this.rotationY = 0;
+                        
+                        this.el.addEventListener('mousedown', this.onMouseDown.bind(this));
+                        this.el.addEventListener('mouseup', this.onMouseUp.bind(this));
+                        this.el.addEventListener('mousemove', this.onMouseMove.bind(this));
+                        
+                        // Untuk sentuhan di mobile
+                        this.el.addEventListener('touchstart', this.onTouchStart.bind(this));
+                        this.el.addEventListener('touchend', this.onTouchEnd.bind(this));
+                        this.el.addEventListener('touchmove', this.onTouchMove.bind(this));
+                    },
+                    onMouseDown: function(event) {
+                        this.ifMouseDown = true;
+                        this.lastX = event.clientX;
+                        this.lastY = event.clientY;
+                    },
+                    onMouseUp: function(event) {
+                        this.ifMouseDown = false;
+                    },
+                    onMouseMove: function(event) {
+                        if(this.ifMouseDown) {
+                            const deltaX = event.clientX - this.lastX;
+                            const deltaY = event.clientY - this.lastY;
+                            
+                            this.rotationY += deltaX * this.data.speed * 0.01;
+                            this.rotationX -= deltaY * this.data.speed * 0.01;
+                            
+                            this.el.object3D.rotation.y = this.rotationY;
+                            this.el.object3D.rotation.x = this.rotationX;
+                            
+                            this.lastX = event.clientX;
+                            this.lastY = event.clientY;
+                        }
+                    },
+                    // Handler untuk sentuhan mobile
+                    onTouchStart: function(event) {
+                        this.ifMouseDown = true;
+                        this.lastX = event.touches[0].clientX;
+                        this.lastY = event.touches[0].clientY;
+                        // Mencegah gulir halaman saat berinteraksi dengan objek
+                        event.preventDefault();
+                    },
+                    onTouchEnd: function(event) {
+                        this.ifMouseDown = false;
+                    },
+                    onTouchMove: function(event) {
+                        if(this.ifMouseDown) {
+                            const deltaX = event.touches[0].clientX - this.lastX;
+                            const deltaY = event.touches[0].clientY - this.lastY;
+                            
+                            this.rotationY += deltaX * this.data.speed * 0.01;
+                            this.rotationX -= deltaY * this.data.speed * 0.01;
+                            
+                            this.el.object3D.rotation.y = this.rotationY;
+                            this.el.object3D.rotation.x = this.rotationX;
+                            
+                            this.lastX = event.touches[0].clientX;
+                            this.lastY = event.touches[0].clientY;
+                            
+                            // Mencegah gulir halaman saat berinteraksi dengan objek
+                            event.preventDefault();
+                        }
+                    }
+                });
+            </script>
+        </a-assets>
+        
         <!-- Marker -->
         <a-marker preset="hiro" raycaster="objects: .clickable" emitevents="true" cursor="fuse: false; rayOrigin: mouse;" id="marker">
-            <!-- We position a cube on top of the marker -->
-            <a-box position="0 0.5 0" material="color: red;" scale="1 1 1" class="clickable" animation="property: rotation; to: 360 360 0; dur: 5000; easing: linear; loop: true"></a-box>
+            <!-- Kubus TANPA animasi otomatis, diganti dengan komponen drag-rotate -->
+            <a-box position="0 0.5 0" 
+                  material="color: red;" 
+                  scale="1 1 1" 
+                  class="clickable" 
+                  drag-rotate-component="speed: 1.5">
+            </a-box>
         </a-marker>
         
         <!-- Camera dengan parameter spesifik untuk mencegah zoom -->
@@ -288,6 +390,9 @@
                     console.log('Marker found!');
                     document.querySelector('.instructions').innerHTML = '<p>Marker detected! Look at the 3D cube.</p>';
                     
+                    // Tampilkan instruksi rotasi
+                    document.getElementById('rotate-instructions').style.display = 'block';
+                    
                     // Reset zoom saat marker terdeteksi
                     forceResetCameraZoom();
                 });
@@ -295,6 +400,9 @@
                 marker.addEventListener('markerLost', function() {
                     console.log('Marker lost!');
                     document.querySelector('.instructions').innerHTML = '<h1>AR Cube Demo</h1><p>Scan the marker to see a 3D cube</p>';
+                    
+                    // Sembunyikan instruksi rotasi
+                    document.getElementById('rotate-instructions').style.display = 'none';
                 });
             }
         });
