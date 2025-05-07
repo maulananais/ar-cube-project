@@ -6,18 +6,57 @@
     <title>AR Cube Demo</title>
     <link rel="stylesheet" href="styles/main.css">
     
-    <!-- Import A-Frame and AR.js -->
+    <!-- Kode JavaScript untuk mencegah rotasi sebelum library lain dimuat -->
+    <script>
+        // Menghack dan mencegah animasi otomatis sebelum library lain dimuat
+        window.AFRAME_INJECTED = {
+            skipAnimationLoop: true
+        };
+    </script>
+    
+    <!-- Import A-Frame dan AR.js -->
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
     
     <style>
-        /* Styling untuk memastikan elemen terlihat */
+        /* Tombol kontrol animasi untuk kubus */
+        .cube-controls {
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999 !important; 
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            width: 280px;
+            pointer-events: auto !important;
+        }
+        
+        .cube-btn {
+            background: #ff4500;
+            border: none;
+            color: white;
+            padding: 10px 15px;
+            margin: 0 5px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+        
+        /* Styling lainnya tetap sama */
         .zoom-control {
             position: fixed;
             bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
-            z-index: 9999 !important; /* Sangat tinggi untuk memastikan terlihat */
+            z-index: 9999 !important;
             background: rgba(0,0,0,0.7);
             color: white;
             padding: 15px;
@@ -116,12 +155,21 @@
     </div>
     
     <div class="instruction-rotate" id="rotate-instructions" style="display: none;">
-        Sentuh dan geser untuk memutar kubus
+        <strong>Gunakan tombol di bawah untuk kontrol kubus:</strong><br>
+        Putar Kiri/Kanan/Atas/Bawah
     </div>
     
     <!-- Feedback visual untuk reset zoom -->
     <div class="flash-message" id="feedback-message">
         Zoom Reset!
+    </div>
+    
+    <!-- Kontrol manual untuk kubus -->
+    <div class="cube-controls" id="cube-controls" style="display: none;">
+        <button class="cube-btn" id="rotate-left">◄ Kiri</button>
+        <button class="cube-btn" id="rotate-right">Kanan ►</button>
+        <button class="cube-btn" id="rotate-up">▲ Atas</button>
+        <button class="cube-btn" id="rotate-down">▼ Bawah</button>
     </div>
     
     <!-- Kontrol zoom manual dengan styling yang lebih kentara -->
@@ -136,132 +184,13 @@
         embedded
         arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; patternRatio: 0.65; facingMode: environment; sourceWidth: 1920; sourceHeight: 1080; displayWidth: 1920; displayHeight: 1080; canvasWidth: 1920; canvasHeight: 1080; maxDetectionRate: 60;">
         
-        <!-- Komponen A-Frame untuk interaksi drag -->
-        <a-assets>
-            <script>
-                // Komponen untuk memutar objek dengan sentuhan
-                AFRAME.registerComponent('drag-rotate-component', {
-                    schema: {
-                        speed: {default: 2}
-                    },
-                    init: function() {
-                        this.ifMouseDown = false;
-                        this.lastX = 0;
-                        this.lastY = 0;
-                        this.rotationX = 0;
-                        this.rotationY = 0;
-                        
-                        // Sangat penting: Batalkan semua animasi yang ada
-                        if (this.el.getAttribute('animation')) {
-                            console.log('Removing existing animation from cube');
-                            this.el.removeAttribute('animation');
-                        }
-                        
-                        // Log untuk memastikan komponen diinisialisasi
-                        console.log('Drag-rotate component initialized for manual rotation');
-                        
-                        this.el.addEventListener('mousedown', this.onMouseDown.bind(this));
-                        this.el.addEventListener('mouseup', this.onMouseUp.bind(this));
-                        this.el.addEventListener('mousemove', this.onMouseMove.bind(this));
-                        
-                        // Untuk sentuhan di mobile
-                        this.el.addEventListener('touchstart', this.onTouchStart.bind(this));
-                        this.el.addEventListener('touchend', this.onTouchEnd.bind(this));
-                        this.el.addEventListener('touchmove', this.onTouchMove.bind(this));
-                    },
-                    onMouseDown: function(event) {
-                        console.log('Mouse down on cube, starting rotation');
-                        this.ifMouseDown = true;
-                        this.lastX = event.clientX;
-                        this.lastY = event.clientY;
-                        event.preventDefault();
-                        event.stopPropagation();
-                    },
-                    onMouseUp: function(event) {
-                        this.ifMouseDown = false;
-                    },
-                    onMouseMove: function(event) {
-                        if(this.ifMouseDown) {
-                            const deltaX = event.clientX - this.lastX;
-                            const deltaY = event.clientY - this.lastY;
-                            
-                            this.rotationY += deltaX * this.data.speed * 0.01;
-                            this.rotationX -= deltaY * this.data.speed * 0.01;
-                            
-                            this.el.object3D.rotation.y = this.rotationY;
-                            this.el.object3D.rotation.x = this.rotationX;
-                            
-                            this.lastX = event.clientX;
-                            this.lastY = event.clientY;
-                            console.log(`Manual rotation: X=${this.rotationX.toFixed(2)}, Y=${this.rotationY.toFixed(2)}`);
-                        }
-                    },
-                    // Handler untuk sentuhan mobile
-                    onTouchStart: function(event) {
-                        console.log('Touch start on cube');
-                        this.ifMouseDown = true;
-                        this.lastX = event.touches[0].clientX;
-                        this.lastY = event.touches[0].clientY;
-                        // Mencegah gulir halaman saat berinteraksi dengan objek
-                        event.preventDefault();
-                    },
-                    onTouchEnd: function(event) {
-                        this.ifMouseDown = false;
-                    },
-                    onTouchMove: function(event) {
-                        if(this.ifMouseDown) {
-                            const deltaX = event.touches[0].clientX - this.lastX;
-                            const deltaY = event.touches[0].clientY - this.lastY;
-                            
-                            this.rotationY += deltaX * this.data.speed * 0.01;
-                            this.rotationX -= deltaY * this.data.speed * 0.01;
-                            
-                            this.el.object3D.rotation.y = this.rotationY;
-                            this.el.object3D.rotation.x = this.rotationX;
-                            
-                            this.lastX = event.touches[0].clientX;
-                            this.lastY = event.touches[0].clientY;
-                            
-                            console.log(`Manual touch rotation: X=${this.rotationX.toFixed(2)}, Y=${this.rotationY.toFixed(2)}`);
-                            
-                            // Mencegah gulir halaman saat berinteraksi dengan objek
-                            event.preventDefault();
-                        }
-                    }
-                });
-                
-                // Komponen untuk mencegah rotasi otomatis
-                AFRAME.registerComponent('no-auto-rotate', {
-                    init: function() {
-                        console.log('Initializing no-auto-rotate component');
-                        
-                        // Hapus atribut animasi jika ada
-                        if (this.el.getAttribute('animation')) {
-                            console.log('Removing animation attribute from cube');
-                            this.el.removeAttribute('animation');
-                        }
-                        
-                        // Setel rotasi awal
-                        this.el.object3D.rotation.set(0, 0, 0);
-                        
-                        // Cek setiap frame untuk memastikan tidak ada rotasi otomatis
-                        this.el.sceneEl.addEventListener('renderstart', () => {
-                            console.log('Scene started rendering, ensuring no auto-rotation');
-                        });
-                    }
-                });
-            </script>
-        </a-assets>
-        
         <!-- Marker -->
-        <a-marker preset="hiro" raycaster="objects: .clickable" emitevents="true" cursor="fuse: false; rayOrigin: mouse;" id="marker">
-            <!-- Kubus TANPA animasi otomatis, diganti dengan komponen drag-rotate + no-auto-rotate -->
+        <a-marker preset="hiro" id="marker">
+            <!-- Kubus tanpa animasi -->
             <a-box position="0 0.5 0" 
                   material="color: red;" 
-                  scale="1 1 1" 
-                  class="clickable" 
-                  no-auto-rotate
-                  drag-rotate-component="speed: 1.5">
+                  scale="1 1 1"
+                  id="arCube">
             </a-box>
         </a-marker>
         
@@ -270,87 +199,74 @@
     </a-scene>
     
     <script>
-        // Menunggu DOM selesai dimuat
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('DOM loaded, initializing...');
+        // Inisialisasi aplikasi setelah semua resource dimuat
+        window.addEventListener('load', function() {
+            console.log('Window loaded completely');
             
-            // Memastikan tombol reset zoom terlihat
-            const zoomControl = document.getElementById('zoom-control');
-            const resetBtn = document.getElementById('reset-zoom');
-            const feedbackMsg = document.getElementById('feedback-message');
-            
-            // Memastikan tombol terlihat secara visual
-            if (zoomControl && resetBtn) {
-                console.log('Zoom controls found in DOM');
-                // Tampilkan tombol dengan jelas
-                zoomControl.style.display = 'flex';
-            } else {
-                console.error('Zoom controls not found!');
+            // Force stop animasi
+            if (window.cancelAnimationFrame) {
+                var id = window.requestAnimationFrame(function(){});
+                while(id--) {
+                    window.cancelAnimationFrame(id);
+                }
+                console.log('Attempted to cancel all animation frames');
             }
             
+            // Definisi variabel
+            const zoomControl = document.getElementById('zoom-control');
+            const resetZoomBtn = document.getElementById('reset-zoom');
+            const feedbackMsg = document.getElementById('feedback-message');
+            const cubeControls = document.getElementById('cube-controls');
+            const rotateLeftBtn = document.getElementById('rotate-left');
+            const rotateRightBtn = document.getElementById('rotate-right');
+            const rotateUpBtn = document.getElementById('rotate-up');
+            const rotateDownBtn = document.getElementById('rotate-down');
+            const rotateInstructions = document.getElementById('rotate-instructions');
+            const cube = document.getElementById('arCube');
+            
+            // Variabel untuk menyimpan rotasi kubus
+            let cubeRotation = { x: 0, y: 0, z: 0 };
+            
             // Fungsi untuk menampilkan feedback visual
-            function showFeedback() {
+            function showFeedback(message) {
+                feedbackMsg.textContent = message || 'Zoom Reset!';
                 feedbackMsg.style.display = 'block';
                 setTimeout(() => {
                     feedbackMsg.style.display = 'none';
                 }, 2000);
             }
             
-            // Fungsi untuk menetapkan zoom kamera ke nilai minimum (tanpa zoom)
+            // Fungsi untuk mengatur ulang zoom kamera
             function forceResetCameraZoom() {
-                console.log('Aggressively resetting camera zoom...');
-                
                 if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-                    // Cari element video yang dibuat oleh AR.js
                     const videoElements = document.querySelectorAll('video');
-                    console.log(`Found ${videoElements.length} video elements`);
                     
-                    // Coba pada semua elemen video yang ditemukan
-                    videoElements.forEach((videoEl, index) => {
+                    videoElements.forEach((videoEl) => {
                         if (videoEl && videoEl.srcObject) {
-                            console.log(`Processing video element ${index}`);
                             const stream = videoEl.srcObject;
                             const videoTracks = stream.getVideoTracks();
                             
                             if (videoTracks.length > 0) {
                                 const videoTrack = videoTracks[0];
-                                console.log('Found video track to configure');
                                 
                                 try {
-                                    // Mendapatkan kemampuan kamera
                                     if (videoTrack.getCapabilities) {
                                         const capabilities = videoTrack.getCapabilities();
-                                        console.log('Camera capabilities:', capabilities);
                                         
-                                        // Jika kamera mendukung zoom
                                         if (capabilities && capabilities.zoom) {
-                                            // Mendapatkan nilai zoom minimum
                                             const min = capabilities.zoom.min || 1.0;
-                                            console.log(`Minimum zoom level: ${min}`);
                                             
-                                            // Mengatur zoom ke minimum (biasanya 1.0 atau kurang)
                                             videoTrack.applyConstraints({
                                                 advanced: [{zoom: min}]
                                             })
                                             .then(() => {
-                                                console.log(`Successfully set zoom to minimum: ${min}`);
+                                                console.log(`Zoom reset to: ${min}`);
                                                 showFeedback();
-                                                
-                                                // Menyimpan pengaturan ke storage lokal
-                                                try {
-                                                    localStorage.setItem('camera-zoom-set', 'true');
-                                                } catch (e) {
-                                                    console.error('Error saving to localStorage:', e);
-                                                }
                                             })
                                             .catch(error => {
                                                 console.error('Failed to set zoom:', error);
                                             });
-                                        } else {
-                                            console.log('Camera does not support zoom capability');
                                         }
-                                    } else {
-                                        console.log('getCapabilities not supported on this device');
                                     }
                                 } catch (e) {
                                     console.error('Error configuring camera:', e);
@@ -358,87 +274,107 @@
                             }
                         }
                     });
-                    
-                    // Mencoba pendekatan alternatif
-                    try {
-                        // Menggunakan pengaturan paling dasar yang mungkin berhasil
-                        navigator.mediaDevices.getUserMedia({
-                            video: {
-                                facingMode: 'environment',
-                                zoom: 1.0
-                            }
-                        })
-                        .then(newStream => {
-                            console.log('Created alternative stream for zoom reset');
-                            // Menampilkan stream ini sesaat lalu menutupnya
-                            setTimeout(() => {
-                                newStream.getTracks().forEach(track => track.stop());
-                            }, 500);
-                        })
-                        .catch(err => {
-                            console.warn('Alternative approach failed:', err);
-                        });
-                    } catch (e) {
-                        console.error('Error with alternative approach:', e);
-                    }
                 }
-                
-                // Mencoba pendekatan Three.js/A-Frame
-                try {
-                    const camera = document.querySelector('[camera]');
-                    if (camera && camera.components && camera.components.camera) {
-                        console.log('Setting A-Frame camera parameters');
-                        camera.components.camera.camera.zoom = 1.0;
-                        camera.components.camera.camera.fov = 70; // FOV lebih lebar
-                        camera.components.camera.camera.updateProjectionMatrix();
-                        console.log('A-Frame camera parameters updated');
-                    }
-                } catch (e) {
-                    console.error('Error updating A-Frame camera:', e);
-                }
-                
-                showFeedback();
             }
             
-            // Mendaftarkan event listener untuk tombol
-            if (resetBtn) {
-                resetBtn.addEventListener('click', function(event) {
+            // Fungsi yang paling penting: memaksa kubus untuk tidak berotasi
+            function forceCubeStatic() {
+                if (cube && cube.object3D) {
+                    // Simpan rotasi sekarang
+                    cubeRotation.x = cube.object3D.rotation.x;
+                    cubeRotation.y = cube.object3D.rotation.y;
+                    cubeRotation.z = cube.object3D.rotation.z;
+                    
+                    // Matikan semua animasi
+                    if (cube.getAttribute('animation')) {
+                        cube.removeAttribute('animation');
+                    }
+                    
+                    // Cegah perubahan rotasi otomatis (ini penting!)
+                    const originalUpdateMatrix = cube.object3D.updateMatrix;
+                    cube.object3D.updateMatrix = function() {
+                        // Pastikan rotasi tidak berubah secara otomatis
+                        this.rotation.x = cubeRotation.x;
+                        this.rotation.y = cubeRotation.y;
+                        this.rotation.z = cubeRotation.z;
+                        // Panggil fungsi asli
+                        originalUpdateMatrix.call(this);
+                    };
+                    
+                    console.log('Force cube to be static');
+                }
+            }
+            
+            // Fungsi untuk memutar kubus manual
+            function rotateCube(axis, amount) {
+                if (cube && cube.object3D) {
+                    if (axis === 'x') cubeRotation.x += amount;
+                    if (axis === 'y') cubeRotation.y += amount;
+                    if (axis === 'z') cubeRotation.z += amount;
+                    
+                    cube.object3D.rotation.x = cubeRotation.x;
+                    cube.object3D.rotation.y = cubeRotation.y;
+                    cube.object3D.rotation.z = cubeRotation.z;
+                    
+                    console.log(`Manual rotation: X=${cubeRotation.x.toFixed(2)}, Y=${cubeRotation.y.toFixed(2)}, Z=${cubeRotation.z.toFixed(2)}`);
+                    
+                    // Tampilkan feedback singkat
+                    showFeedback('Kubus Diputar');
+                }
+            }
+            
+            // Reset zoom button event
+            if (resetZoomBtn) {
+                resetZoomBtn.addEventListener('click', function(event) {
                     event.preventDefault();
                     event.stopPropagation();
-                    console.log('Reset zoom button clicked');
                     forceResetCameraZoom();
-                    return false;
                 });
-                console.log('Reset zoom button listener registered');
             }
             
-            // Jalankan reset awal setelah beberapa detik
-            setTimeout(() => {
-                forceResetCameraZoom();
-                console.log('Initial camera reset performed');
-            }, 3000);
+            // Kontrol rotasi kubus event
+            if (rotateLeftBtn) {
+                rotateLeftBtn.addEventListener('click', function() {
+                    rotateCube('y', 0.3);
+                });
+            }
             
-            // Reset ulang setiap 10 detik untuk memastikan zoom tetap 1x
-            const resetInterval = setInterval(forceResetCameraZoom, 10000);
+            if (rotateRightBtn) {
+                rotateRightBtn.addEventListener('click', function() {
+                    rotateCube('y', -0.3);
+                });
+            }
+            
+            if (rotateUpBtn) {
+                rotateUpBtn.addEventListener('click', function() {
+                    rotateCube('x', 0.3);
+                });
+            }
+            
+            if (rotateDownBtn) {
+                rotateDownBtn.addEventListener('click', function() {
+                    rotateCube('x', -0.3);
+                });
+            }
             
             // Event listener untuk marker
             const marker = document.getElementById('marker');
             if (marker) {
                 marker.addEventListener('markerFound', function() {
                     console.log('Marker found!');
-                    document.querySelector('.instructions').innerHTML = '<p>Marker detected! Look at the 3D cube.</p>';
+                    document.querySelector('.instructions').innerHTML = '<p>Marker detected! Use the buttons to rotate the cube</p>';
                     
-                    // Tampilkan instruksi rotasi
-                    document.getElementById('rotate-instructions').style.display = 'block';
+                    // Tampilkan kontrol dan instruksi
+                    rotateInstructions.style.display = 'block';
+                    cubeControls.style.display = 'flex';
                     
-                    // Reset zoom saat marker terdeteksi
+                    // Reset zoom dan pastikan kubus tidak berotasi
                     forceResetCameraZoom();
+                    forceCubeStatic();
                     
-                    // Pastikan cube tidak berotasi otomatis
-                    const cube = document.querySelector('a-box');
-                    if (cube && cube.getAttribute('animation')) {
-                        console.log('WARNING: Animation reappeared, removing it!');
-                        cube.removeAttribute('animation');
+                    // Set interval untuk terus memastikan kubus tidak berputar
+                    if (!window.cubeStaticInterval) {
+                        window.cubeStaticInterval = setInterval(forceCubeStatic, 100);
                     }
                 });
                 
@@ -446,28 +382,40 @@
                     console.log('Marker lost!');
                     document.querySelector('.instructions').innerHTML = '<h1>AR Cube Demo</h1><p>Scan the marker to see a 3D cube</p>';
                     
-                    // Sembunyikan instruksi rotasi
-                    document.getElementById('rotate-instructions').style.display = 'none';
+                    // Sembunyikan kontrol
+                    rotateInstructions.style.display = 'none';
+                    cubeControls.style.display = 'none';
+                    
+                    // Hentikan interval
+                    if (window.cubeStaticInterval) {
+                        clearInterval(window.cubeStaticInterval);
+                        window.cubeStaticInterval = null;
+                    }
                 });
             }
             
-            // Tambahan: pastikan tidak ada animasi otomatis
-            const cube = document.querySelector('a-box');
-            if (cube) {
-                console.log('Found cube, ensuring no animation');
-                // Hapus atribut animasi jika masih ada
-                if (cube.getAttribute('animation')) {
-                    console.log('CRITICAL: Animation still present, removing it!');
-                    cube.removeAttribute('animation');
-                } else {
-                    console.log('Good: No animation attribute found on cube');
-                }
-                
-                // Log properti rotasi awal
-                console.log('Cube initial rotation:', cube.object3D ? 
-                           `X: ${cube.object3D.rotation.x}, Y: ${cube.object3D.rotation.y}, Z: ${cube.object3D.rotation.z}` :
-                           'Object3D not available yet');
-            }
+            // Jalankan reset awal setelah beberapa detik
+            setTimeout(() => {
+                forceResetCameraZoom();
+                forceCubeStatic();
+                console.log('Initial camera and cube setup complete');
+            }, 3000);
+            
+            // Reset zoom setiap 10 detik
+            const resetZoomInterval = setInterval(forceResetCameraZoom, 10000);
+            
+            // Override fungsi requestAnimationFrame untuk mencegah animasi otomatis
+            const originalRAF = window.requestAnimationFrame;
+            window.requestAnimationFrame = function(callback) {
+                // Filter callback yang mungkin mengubah rotasi kubus
+                const wrappedCallback = function(timestamp) {
+                    // Panggil callback asli
+                    callback(timestamp);
+                    // Pastikan kubus tetap statis
+                    forceCubeStatic();
+                };
+                return originalRAF(wrappedCallback);
+            };
         });
     </script>
 </body>
